@@ -1,69 +1,66 @@
 # Anivexa-Proxy
 
-Dynamic CORS proxy and media stream rewriter for HLS (`.m3u8`), DASH (`.mpd`), MP4, and `.ts` segments. Zero dependencies. No hardcoded CDN lists. Built on Web Standard APIs.
+A streaming proxy for HLS, DASH, MP4, and media segments. The Node, Vercel, and Cloudflare Worker entry points share one implementation; it does not keep a CDN/provider hostname list.
 
-run it yourself:
+## Run locally
 
-```bash
-node proxy.js
+Node.js 20 or newer:
+
+```sh
+npm install
+npm start
 ```
 
-Defaults to port `8080`. Set `PORT` env variable to change it.
+The server listens on port `8080` by default. Set `PORT` to change it. The proxy endpoint is `/proxy`; `/health` returns a health check.
 
-For Cloudflare Workers via Wrangler:
+## Request
 
-```bash
-npx wrangler deploy proxy.js --name anivexa-proxy
+Pass the target as a URL-encoded `url` parameter. Include `ref` when the upstream requires a page referer.
+
+```js
+const proxy = new URL("https://proxy.example/proxy");
+proxy.searchParams.set("url", stream.url);
+proxy.searchParams.set("ref", stream.referer || "https://player.example/");
+
+if (stream.headers) {
+  proxy.searchParams.set("headers", JSON.stringify(stream.headers));
+}
+
+if (stream.playlist_key || stream.key) {
+  proxy.searchParams.set("playlist_key", stream.playlist_key || stream.key);
+}
+
+if (stream.server === "HD-2") {
+  proxy.searchParams.set("unwrap", "flixcloud-hd2");
+}
 ```
 
----
+The proxy rewrites HLS variants, segments, encryption keys, maps, and subtitle playlists. It supports DASH `BaseURL` and media-template references, forwards MP4 byte ranges, preserves upstream status codes, and streams binary bodies without buffering them. URLs returned in an API `headers` object can be supplied through the `headers` parameter.
 
-## Usage
+For ReAnime FlixCloud, encrypted manifests can be decoded when the API's `playlist_key` or `key` is passed. HD-2 image-wrapped segments need `unwrap=flixcloud-hd2`; the mode is propagated to child segment URLs. DRM-protected streams and opaque encrypted manifests without their required key are not made playable by the proxy.
 
-### Piped syntax
+## Deployment
 
-Target URL and referer separated by `|`:
+- Node or Render: `node node-server.js`
+- Cloudflare Workers: `npx wrangler deploy proxy.js --name anivexa-proxy`
+- Vercel: deploy the included `api/index.js` and `vercel.json`
 
+## Configuration
+
+| Variable | Effect |
+|---|---|
+| `PORT` | Node server port; default `8080` |
+| `PROXY_TOKEN` | Require the matching `access` query parameter or `X-Proxy-Token` header |
+| `ALLOWED_HOSTS` | Optional comma-separated host allowlist; entries also match subdomains |
+| `ALLOWED_ORIGINS` | Optional comma-separated browser-origin allowlist |
+| `PROXY_USER_AGENT` | Default upstream user agent when the caller supplies none |
+
+Private, loopback, link-local, and local-name targets are rejected. The Node runtime additionally checks DNS results and every redirect. If deployed publicly, configure `PROXY_TOKEN` and/or `ALLOWED_HOSTS`; otherwise this is an unauthenticated relay for public internet hosts. Do not put long-lived secrets in query strings on services whose access logs retain full URLs.
+
+Node retries an upstream `403` or network failure with `wreq-js` when available. Edge deployments use their platform's standard `fetch` implementation.
+
+## Test
+
+```sh
+npm test
 ```
-/proxy?url=https://cdn.example.com/stream/master.m3u8|https://referer-site.com/
-```
-
-### Query parameter syntax
-
-```
-/proxy?url=https://cdn.example.com/stream/master.m3u8&ref=https://referer-site.com/
-```
-
-If no referer is provided, defaults to the target URL's origin.
-
----
-
-## What it does
-
-- Fetches any upstream URL with spoofed browser headers (`Referer`, `Origin`, `User-Agent`, `Sec-Fetch-*`).
-- Detects `.m3u8` playlists and rewrites all segment URLs, variant stream URLs, and `#EXT-X-KEY URI=` entries back through the proxy.
-- Detects `.mpd` manifests and rewrites `<BaseURL>`, `initialization`, `media`, and `sourceURL` attributes.
-- Forwards `Range` headers for MP4 seeking (`206 Partial Content`).
-- Returns proper CORS headers on every response.
-- Passes through error pages from upstream without corrupting them.
-
----
-
-## Endpoints
-
-| Route | Method | Description |
-|---|---|---|
-| `/health` | GET | Returns `{"status":"ok"}` |
-| `/proxy` | GET | Proxy endpoint, requires `?url=` parameter |
-| `*` | OPTIONS | CORS preflight, returns `204` |
-
----
-
-## Runs on
-
-- Cloudflare Workers
-- Vercel Edge Functions
-- Deno
-- Bun
-- Node.js (v18+)
-

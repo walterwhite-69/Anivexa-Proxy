@@ -1,0 +1,16 @@
+{
+  "name": "anivexa-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node node-server.js",
+    "test": "node --test"
+  },
+  "optionalDependencies": {
+    "wreq-js": "^3.2.0"
+  }
+}

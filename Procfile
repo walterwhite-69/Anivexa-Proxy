@@ -1,1 +1,1 @@
-web: node proxy.js
+web: node node-server.js

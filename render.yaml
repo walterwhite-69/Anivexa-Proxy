@@ -2,4 +2,4 @@ services:
   - type: web
     name: anivexa-proxy
     runtime: node
-    startCommand: node proxy.js
+    startCommand: node node-server.js
